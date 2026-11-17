@@ -1,0 +1,155 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Spending</title>
+<meta name="apple-mobile-web-app-capable" content="yes">
+<style>
+  :root{--bg:#0e0f12;--card:#17191e;--line:#262931;--text:#f2f3f5;--mute:#8b909c;
+    --food:#f2a541;--transport:#4fa3f7;--shopping:#c77dff;--other:#5fd3a5;--neg:#ff6b6b}
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{background:var(--bg);color:var(--text);font:15px/1.4 -apple-system,BlinkMacSystemFont,"SF Pro Text",sans-serif;
+    padding:calc(env(safe-area-inset-top) + 20px) 16px 40px;-webkit-font-smoothing:antialiased}
+  .label{color:var(--mute);font-size:13px;letter-spacing:.02em}
+  .hero{padding:8px 4px 22px}
+  .bal{font-size:44px;font-weight:700;letter-spacing:-.02em;margin-top:2px;font-variant-numeric:tabular-nums}
+  .bal.neg{color:var(--neg)}
+  .card{background:var(--card);border-radius:16px;padding:16px;margin-bottom:14px}
+  .row{display:flex;justify-content:space-between;align-items:baseline}
+  .month{display:flex;gap:8px;overflow-x:auto;margin:0 -16px 14px;padding:0 16px;scrollbar-width:none}
+  .month::-webkit-scrollbar{display:none}
+  .chip{flex:none;border:1px solid var(--line);background:none;color:var(--mute);border-radius:999px;padding:6px 12px;font:inherit;font-size:13px}
+  .chip.on{background:var(--text);color:var(--bg);border-color:var(--text)}
+  .spent{font-size:26px;font-weight:650;font-variant-numeric:tabular-nums}
+  .bar{display:flex;height:10px;border-radius:6px;overflow:hidden;background:var(--line);margin:14px 0 12px}
+  .bar span{display:block;height:100%}
+  .cats{display:grid;grid-template-columns:1fr;gap:8px}
+  .cat{display:flex;align-items:center;gap:8px;font-size:14px}
+  .dot{width:9px;height:9px;border-radius:50%;flex:none}
+  .cat b{margin-left:auto;font-weight:600;font-variant-numeric:tabular-nums}
+  .day{color:var(--mute);font-size:12px;text-transform:uppercase;letter-spacing:.06em;margin:18px 4px 6px}
+  .tx{display:flex;align-items:center;gap:12px;padding:11px 0;border-top:1px solid var(--line)}
+  .tx:first-child{border-top:none}
+  .ico{width:34px;height:34px;border-radius:10px;display:grid;place-items:center;font-size:16px;flex:none}
+  .tx .m{flex:1;min-width:0}
+  .tx .m div:first-child{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-weight:500}
+  .tx .m div:last-child{color:var(--mute);font-size:12px}
+  .tx .a{font-weight:600;font-variant-numeric:tabular-nums}
+  .empty{color:var(--mute);text-align:center;padding:30px 0}
+  .demo{background:#2a2414;color:#f2c76b;font-size:12px;padding:8px 12px;border-radius:10px;margin-bottom:14px}
+</style>
+</head>
+<body>
+
+<div id="demo" class="demo" hidden>Demo data — open this from your “Spending” shortcut to see your real purchases.</div>
+<div class="hero">
+  <div class="label">Left to spend</div>
+  <div class="bal" id="balance">—</div>
+</div>
+<div class="month" id="months"></div>
+<div class="card">
+  <div class="row"><span class="label" id="spentLabel">Spent</span><span class="label" id="count"></span></div>
+  <div class="spent" id="spent">—</div>
+  <div class="bar" id="bar"></div>
+  <div class="cats" id="cats"></div>
+</div>
+<div id="list"></div>
+
+<script>
+function fromHash(){
+  let h=(location.hash||"").slice(1); if(!h) return null;
+  try{ h=decodeURIComponent(h); }catch(e){}
+  h=h.replace(/\s/g,"").replace(/-/g,"+").replace(/_/g,"/");
+  while(h.length%4) h+="=";
+  try{ const b=atob(h); return new TextDecoder().decode(Uint8Array.from(b,c=>c.charCodeAt(0))); }catch(e){ return null; }
+}
+const CUR = "HK$";
+const CATS = {
+  Food:{c:"var(--food)",i:"🍜"}, Transport:{c:"var(--transport)",i:"🚇"},
+  Shopping:{c:"var(--shopping)",i:"🛍️"}, Other:{c:"var(--other)",i:"•"}
+};
+const num = s => { const n = parseFloat(String(s||"").replace(/[^0-9.\-]/g,"")); return isNaN(n)?0:n; };
+const money = n => CUR + Math.abs(n).toLocaleString("en-HK",{minimumFractionDigits:2,maximumFractionDigits:2});
+
+let rawLog="", rawBal="";
+const decoded = fromHash();
+if (decoded === null) {           // opened without data → show demo
+  document.getElementById("demo").hidden = false;
+  rawLog = ["2026-11-01 08:40|MTR|12.4|Transport","2026-11-01 12:55|Café de Coral|48|Food",
+    "2026-11-03 19:10|Uniqlo|299|Shopping","2026-11-05 13:02|Pret A Manger|62.5|Food",
+    "2026-11-05 18:30|Citybus|7.8|Transport","2026-11-08 21:15|7-Eleven|23|Food",
+    "2026-11-12 16:44|Apple Store|199|Shopping","2026-11-15 10:20|Watsons|85|Other",
+    "2026-10-28 12:10|Mixue|18|Food","2026-10-25 09:00|HKTaxi|86|Transport"].join("\n");
+  rawBal = "8432.60";
+} else {                          // first line = balance, rest = purchase log
+  const lines = decoded.split(/\r?\n/);
+  rawBal = lines.shift() || "0";
+  rawLog = lines.join("\n");
+}
+
+const tx = rawLog.split(/\r?\n/).map(l => l.trim()).filter(l => l.includes("|")).map(l => {
+  const p = l.split("|");
+  const cat = CATS[(p[3]||"").trim()] ? p[3].trim() : "Other";
+  const d = new Date((p[0]||"").trim().replace(" ","T"));
+  return { d: isNaN(d) ? new Date() : d, m:(p[1]||"Purchase").trim(), a:num(p[2]), cat };
+}).sort((a,b) => b.d - a.d);
+
+const bal = num(rawBal);
+const balEl = document.getElementById("balance");
+balEl.textContent = (bal < 0 ? "−" : "") + money(bal);
+if (bal < 0) balEl.classList.add("neg");
+
+const key = d => d.getFullYear() + "-" + String(d.getMonth()+1).padStart(2,"0");
+const months = [...new Set(tx.map(t => key(t.d)))];
+const now = key(new Date());
+if (!months.includes(now)) months.unshift(now);
+months.push("all");
+let sel = now;
+
+function chips(){
+  const el = document.getElementById("months"); el.innerHTML = "";
+  months.forEach(k => {
+    const b = document.createElement("button");
+    b.className = "chip" + (k===sel ? " on" : "");
+    b.textContent = k==="all" ? "All time" :
+      new Date(k+"-01T00:00").toLocaleDateString("en-GB",{month:"short",year:"numeric"});
+    b.onclick = () => { sel = k; render(); };
+    el.appendChild(b);
+  });
+}
+
+function render(){
+  chips();
+  const rows = sel==="all" ? tx : tx.filter(t => key(t.d)===sel);
+  const total = rows.reduce((s,t) => s+t.a, 0);
+  document.getElementById("spent").textContent = money(total);
+  document.getElementById("spentLabel").textContent = sel==="all" ? "Spent, all time" : "Spent this month";
+  document.getElementById("count").textContent = rows.length + (rows.length===1?" purchase":" purchases");
+
+  const by = {}; Object.keys(CATS).forEach(c => by[c]=0);
+  rows.forEach(t => by[t.cat] += t.a);
+  document.getElementById("bar").innerHTML = total ? Object.keys(CATS).filter(c=>by[c]>0)
+    .map(c => `<span style="width:${by[c]/total*100}%;background:${CATS[c].c}"></span>`).join("") : "";
+  document.getElementById("cats").innerHTML = Object.keys(CATS).map(c =>
+    `<div class="cat"><span class="dot" style="background:${CATS[c].c}"></span>${c}<b>${money(by[c])}</b></div>`).join("");
+
+  const list = document.getElementById("list");
+  if (!rows.length) { list.innerHTML = '<div class="empty">No purchases yet. Tap your phone to pay and they’ll show up here.</div>'; return; }
+  const groups = {};
+  rows.forEach(t => { const k = t.d.toDateString(); (groups[k] = groups[k] || []).push(t); });
+  const esc = s => s.replace(/[&<>"]/g, ch => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[ch]));
+  list.innerHTML = Object.entries(groups).map(([k,ts]) => {
+    const d = new Date(k);
+    const lbl = k===new Date().toDateString() ? "Today" : d.toLocaleDateString("en-GB",{weekday:"short",day:"numeric",month:"short"});
+    const daySum = ts.reduce((s,t)=>s+t.a,0);
+    return `<div class="day row"><span>${lbl}</span><span>${money(daySum)}</span></div><div class="card" style="padding:4px 16px">` +
+      ts.map(t => `<div class="tx"><div class="ico" style="background:color-mix(in srgb, ${CATS[t.cat].c} 18%, transparent)">${CATS[t.cat].i}</div>
+        <div class="m"><div>${esc(t.m)}</div><div>${t.cat} · ${t.d.toLocaleTimeString("en-GB",{hour:"2-digit",minute:"2-digit"})}</div></div>
+        <div class="a">−${money(t.a)}</div></div>`).join("") + `</div>`;
+  }).join("");
+}
+render();
+</script>
+</body>
+</html>
