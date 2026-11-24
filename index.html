@@ -57,12 +57,16 @@
 <div id="list"></div>
 
 <script>
+let DIAG = "";
 function fromHash(){
-  let h=(location.hash||"").slice(1); if(!h) return null;
+  let h=(location.hash||"").slice(1);
+  if(!h){ const q=new URLSearchParams(location.search).get("d"); if(q) h=q; }
+  DIAG = "received " + h.length + " characters of data";
+  if(!h) return null;
   try{ h=decodeURIComponent(h); }catch(e){}
   h=h.replace(/\s/g,"").replace(/-/g,"+").replace(/_/g,"/");
   while(h.length%4) h+="=";
-  try{ const b=atob(h); return new TextDecoder().decode(Uint8Array.from(b,c=>c.charCodeAt(0))); }catch(e){ return null; }
+  try{ const b=atob(h); return new TextDecoder().decode(Uint8Array.from(b,c=>c.charCodeAt(0))); }catch(e){ DIAG += " but couldn't decode it ("+e.name+"), starts: "+h.slice(0,12); return null; }
 }
 const CUR = "HK$";
 const CATS = {
@@ -85,7 +89,8 @@ try {
   else decoded = localStorage.getItem("spend-data");                   // opened directly → last sync
 } catch (e) {}
 if (decoded === null) {           // opened without data → show demo
-  document.getElementById("demo").hidden = false;
+  const dm = document.getElementById("demo"); dm.hidden = false;
+  dm.textContent = "Demo data — no purchases received (" + DIAG + "). Open this from your “Spending” shortcut.";
   rawLog = ["2026-11-01 08:40|MTR|12.4|Transport","2026-11-01 12:55|Café de Coral|48|Food",
     "2026-11-03 19:10|Uniqlo|299|Shopping","2026-11-05 13:02|Pret A Manger|62.5|Food",
     "2026-11-05 18:30|Citybus|7.8|Transport","2026-11-08 21:15|7-Eleven|23|Food",
