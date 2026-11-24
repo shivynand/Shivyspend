@@ -38,11 +38,31 @@
   .tx .a{font-weight:600;font-variant-numeric:tabular-nums}
   .empty{color:var(--mute);text-align:center;padding:30px 0}
   .demo{background:#2a2414;color:#f2c76b;font-size:12px;padding:8px 12px;border-radius:10px;margin-bottom:14px}
+  .tabs{display:flex;background:var(--card);border-radius:12px;padding:3px;margin:0 0 18px}
+  .tabs button{flex:1;border:0;background:none;color:var(--mute);font:inherit;font-size:14px;font-weight:600;padding:8px;border-radius:9px}
+  .tabs button.on{background:#2a2d35;color:var(--text)}
+  .sub{display:flex;align-items:center;gap:12px;padding:12px 0;border-top:1px solid var(--line)}
+  .sub:first-child{border-top:none}
+  .sub .ico{background:#22252c;font-size:18px}
+  .sub .m{flex:1;min-width:0}.sub .m div:first-child{font-weight:600}.sub .m div:nth-child(2){color:var(--mute);font-size:12px;margin-top:1px}
+  .due{font-size:12px;font-weight:600;padding:3px 8px;border-radius:999px;background:#22252c;color:var(--mute);white-space:nowrap}
+  .due.soon{background:#3a1f22;color:#ff7b7f}.due.week{background:#33291a;color:#f2c76b}
+  .note{color:var(--mute);font-size:12px;margin-top:2px}
+  .btn{display:block;width:100%;border:1px dashed #3a3d45;background:none;color:var(--text);font:inherit;font-weight:600;padding:12px;border-radius:14px;margin-top:4px}
+  .ed{display:grid;gap:8px;padding:6px 0 12px}
+  .ed input,.ed select{width:100%;background:#0e0f12;border:1px solid var(--line);color:var(--text);font:inherit;font-size:15px;padding:10px;border-radius:10px}
+  .ed .two{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+  .ed .acts{display:flex;gap:8px}.ed .acts button{flex:1;border:0;border-radius:10px;padding:10px;font:inherit;font-weight:600}
+  .save{background:var(--text);color:var(--bg)}.del{background:#3a1f22;color:#ff7b7f}.cancel{background:#22252c;color:var(--text)}
+  .sugg{display:flex;align-items:center;gap:10px;padding:10px 0;border-top:1px solid var(--line);font-size:14px}
+  .sugg:first-child{border-top:none}.sugg button{margin-left:auto;border:0;background:#22252c;color:var(--text);border-radius:999px;padding:5px 12px;font:inherit;font-size:13px}
 </style>
 </head>
 <body>
 
 <div id="demo" class="demo" hidden>Demo data — open this from your “Spending” shortcut to see your real purchases.</div>
+<div class="tabs"><button id="tSpend" class="on">💳 Spending</button><button id="tSubs">🔁 Subscriptions</button></div>
+<div id="tab-spend">
 <div class="hero">
   <div class="label">Left to spend</div>
   <div class="bal" id="balance">—</div>
@@ -55,6 +75,18 @@
   <div class="cats" id="cats"></div>
 </div>
 <div id="list"></div>
+</div>
+<div id="tab-subs" hidden>
+  <div class="card">
+    <div class="row"><span class="label">Subscriptions</span><span class="label" id="subCount"></span></div>
+    <div class="spent" id="subMonth">—</div>
+    <div class="note" id="subYear"></div>
+  </div>
+  <div class="card" style="padding:4px 16px" id="subList"></div>
+  <button class="btn" id="subAdd">＋ Add subscription</button>
+  <div id="suggWrap" hidden><div class="day row" style="margin-top:22px"><span>Might be subscriptions</span></div><div class="card" style="padding:4px 16px" id="sugg"></div></div>
+  <div class="note" id="subHint" style="text-align:center;margin-top:16px"></div>
+</div>
 
 <script>
 let DIAG = "";
@@ -75,15 +107,16 @@ const CATS = {
 };
 const RULES = [
   ["Transport", /\b(mtr|kmb|citybus|ctb|nwfb|lwb|bus|minibus|taxi|hktaxi|uber|didi|ferry|star ferry|tram|lrt|octopus|airport express|petrol|shell|esso|caltex|sinopec|parking)\b/i],
-  ["Food", /(mcdonald|kfc|burger|pizza|cafe|café|coffee|starbucks|pacific coffee|% arabica|restaurant|kitchen|bistro|bar\b|pub\b|noodle|ramen|sushi|dim sum|bakery|tea|bubble|mixue|pret|subway|fairwood|maxim|café de coral|tamjai|yoshinoya|deliveroo|foodpanda|keeta|canteen|food|eat|7-eleven|7-11|circle k|wellcome|parknshop|park n shop|market|jasons|city'super|aeon)/i],
+  ["Food", /(mcdonald|kfc|burger|pizza|cafe|café|coffee|starbucks|pacific coffee|% arabica|restaurant|kitchen|bistro|bar\b|pub\b|noodle|ramen|sushi|dim sum|bakery|tea|bubble|mixue|pret|subway|fairwood|maxim|café de coral|tamjai|yoshinoya|deliveroo|foodpanda|keeta|canteen|food|eat|7-eleven|7-11|circle k|wellcome|parknshop|park n shop|market|jasons|city'super|aeon|musubi)/i],
   ["Shopping", /(uniqlo|zara|h&m|muji|ikea|apple|amazon|taobao|tmall|hktvmall|watsons|mannings|sasa|fortress|broadway|decathlon|nike|adidas|shop|store|mall|boutique|sephora|don don donki|daiso|ztore)/i],
 ];
 function guessCat(m){ for (const [c,re] of RULES) if (re.test(m)) return c; return "Other"; }
 const num = s => { const n = parseFloat(String(s||"").replace(/[^0-9.\-]/g,"")); return isNaN(n)?0:n; };
 const money = n => CUR + Math.abs(n).toLocaleString("en-HK",{minimumFractionDigits:2,maximumFractionDigits:2});
 
-let rawLog="", rawBal="";
+let rawLog="", rawBal="", rawSubs=null;
 let decoded = fromHash();
+if (decoded !== null && decoded.includes("---SUBS---")) { const k = decoded.indexOf("---SUBS---"); rawSubs = decoded.slice(k + 10).trim(); decoded = decoded.slice(0, k); }
 try {
   if (decoded !== null) localStorage.setItem("spend-data", decoded);   // remember latest sync
   else decoded = localStorage.getItem("spend-data");                   // opened directly → last sync
@@ -169,6 +202,95 @@ function render(){
   }).join("");
 }
 render();
+
+/* ---------- tabs ---------- */
+const tS = document.getElementById("tSpend"), tB = document.getElementById("tSubs");
+function tab(which){ document.getElementById("tab-spend").hidden = which!=="spend"; document.getElementById("tab-subs").hidden = which!=="subs";
+  tS.classList.toggle("on", which==="spend"); tB.classList.toggle("on", which==="subs"); try{localStorage.setItem("tab",which);}catch(e){} }
+tS.onclick = () => tab("spend"); tB.onclick = () => tab("subs");
+try{ if (localStorage.getItem("tab")==="subs") tab("subs"); }catch(e){}
+
+/* ---------- subscriptions ---------- */
+const FX = { HKD:1, USD:7.8, EUR:8.4, GBP:9.9, CNY:1.08, JPY:0.05, SGD:5.8 };
+const DEMO_SUBS = ["Apple (App Store/iCloud)|148|HKD|monthly|2026-11-27|🍎|Check Settings → Apple ID → Subscriptions",
+  "Jungle Mega Mind|7.99|USD|monthly|2026-12-13|🧠|","OpusClip|167.45|HKD|monthly|2026-12-20|🎬|Monthly? first charge 20 Nov",
+  "NordVPN bundle|769|HKD|yearly|2027-11-11|🛡️|Check if 1- or 2-year plan"].join("\n");
+const canSave = rawSubs !== null;            // only inside the Scriptable app
+let subs = parseSubs(rawSubs !== null ? rawSubs : DEMO_SUBS);
+let editing = -1;
+
+function parseSubs(t){ return String(t||"").split(/\r?\n/).filter(l=>l.includes("|")).map(l=>{ const p=l.split("|").map(x=>x.trim());
+  return { name:p[0]||"Subscription", amt:num(p[1]), cur:(p[2]||"HKD").toUpperCase(), cycle:(p[3]||"monthly").toLowerCase(), next:p[4]||"", emoji:p[5]||"🔁", note:p[6]||"" }; }); }
+function dumpSubs(){ return subs.map(x=>[x.name,x.amt,x.cur,x.cycle,x.next,x.emoji,x.note].map(v=>String(v).replace(/[|\n]/g," ")).join("|")).join("\n"); }
+function step(d, cycle, dir=1){ const n=new Date(d); if(cycle==="yearly") n.setFullYear(n.getFullYear()+dir); else if(cycle==="weekly") n.setDate(n.getDate()+7*dir); else n.setMonth(n.getMonth()+dir); return n; }
+function nextDate(x){ let d=new Date(x.next+"T00:00"); if(isNaN(d)) return null; const today=new Date(); today.setHours(0,0,0,0); let g=0; while(d<today && g++<500) d=step(d,x.cycle); return d; }
+const perMonth = x => { const hk=x.amt*(FX[x.cur]||1); return x.cycle==="yearly"? hk/12 : x.cycle==="weekly"? hk*52/12 : hk; };
+const curFmt = x => x.cur==="HKD" ? money(x.amt) : x.cur+" "+x.amt.toFixed(2)+"  ≈ "+money(x.amt*(FX[x.cur]||1));
+const escH = v => String(v).replace(/[&<>"]/g, ch => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[ch]));
+
+function saveSubs(){ if(!canSave) return; location.href = "subsave:" + encodeURIComponent(dumpSubs()); }
+
+function renderSubs(){
+  const items = subs.map((x,i)=>({x,i,d:nextDate(x)})).sort((a,b)=>(a.d||9e15)-(b.d||9e15));
+  const m = subs.reduce((s,x)=>s+perMonth(x),0);
+  document.getElementById("subMonth").textContent = "≈ " + money(m) + " / month";
+  document.getElementById("subYear").textContent = "≈ " + money(m*12) + " a year";
+  document.getElementById("subCount").textContent = subs.length + (subs.length===1?" active":" active");
+  const today=new Date(); today.setHours(0,0,0,0);
+  const list = document.getElementById("subList");
+  list.innerHTML = items.length ? items.map(({x,i,d}) => {
+    if (i===editing) return editor(x,i);
+    const days = d ? Math.round((d-today)/864e5) : null;
+    const due = days===null ? "set date" : days===0 ? "today" : days===1 ? "tomorrow" : "in "+days+" days";
+    const cls = days!==null && days<=3 ? "soon" : days!==null && days<=7 ? "week" : "";
+    const ds = d ? d.toLocaleDateString("en-GB",{weekday:"short",day:"numeric",month:"short"}) : "";
+    return `<div class="sub" data-i="${i}"><div class="ico">${escH(x.emoji)}</div>
+      <div class="m"><div>${escH(x.name)}</div><div>${x.cycle[0].toUpperCase()+x.cycle.slice(1)} · ${escH(curFmt(x))}</div>${x.note?`<div class="note">${escH(x.note)}</div>`:""}</div>
+      <div style="text-align:right"><div class="due ${cls}">${due}</div><div class="note">${ds}</div></div></div>`;
+  }).join("") + (editing===subs.length ? editor({name:"",amt:"",cur:"HKD",cycle:"monthly",next:"",emoji:"🔁",note:""},subs.length) : "")
+  : (editing===0 ? editor({name:"",amt:"",cur:"HKD",cycle:"monthly",next:"",emoji:"🔁",note:""},0) : '<div class="empty">No subscriptions yet.</div>');
+  list.querySelectorAll(".sub").forEach(el => el.onclick = () => { if(!canSave) return; editing = +el.dataset.i; renderSubs(); });
+  wireEditor();
+  document.getElementById("subHint").textContent = canSave ? "Tap a subscription to edit it. You’ll get a reminder 2 days before each renewal." : "Open from your Spending icon to add or edit subscriptions.";
+  document.getElementById("subAdd").hidden = !canSave || editing!==-1;
+  renderSugg();
+}
+function editor(x,i){
+  const opt=(v,arr)=>arr.map(a=>`<option${a===v?" selected":""}>${a}</option>`).join("");
+  return `<div class="ed" id="ed"><div class="two"><input id="eName" placeholder="Name (e.g. Netflix)" value="${escH(x.name)}"><input id="eEmoji" placeholder="Emoji" value="${escH(x.emoji)}"></div>
+    <div class="two"><input id="eAmt" inputmode="decimal" placeholder="Amount" value="${escH(x.amt)}"><select id="eCur">${opt(x.cur,["HKD","USD","EUR","GBP","CNY","JPY","SGD"])}</select></div>
+    <div class="two"><select id="eCycle">${opt(x.cycle,["monthly","yearly","weekly"])}</select><input id="eNext" type="date" value="${escH(x.next)}"></div>
+    <input id="eNote" placeholder="Note (optional)" value="${escH(x.note)}">
+    <div class="acts"><button class="cancel" id="eCancel">Cancel</button>${i<subs.length?'<button class="del" id="eDel">Delete</button>':""}<button class="save" id="eSave">Save</button></div></div>`;
+}
+function wireEditor(){
+  const ed=document.getElementById("ed"); if(!ed) return;
+  const v=id=>document.getElementById(id).value.trim();
+  document.getElementById("eCancel").onclick=e=>{e.stopPropagation(); editing=-1; renderSubs();};
+  const del=document.getElementById("eDel"); if(del) del.onclick=e=>{e.stopPropagation(); subs.splice(editing,1); editing=-1; saveSubs(); renderSubs();};
+  document.getElementById("eSave").onclick=e=>{e.stopPropagation(); if(!v("eName")) return;
+    const x={name:v("eName"),amt:num(v("eAmt")),cur:v("eCur"),cycle:v("eCycle"),next:v("eNext"),emoji:v("eEmoji")||"🔁",note:v("eNote")};
+    if(editing<subs.length) subs[editing]=x; else subs.push(x); editing=-1; saveSubs(); renderSubs();};
+}
+document.getElementById("subAdd").onclick=()=>{ editing=subs.length; renderSubs(); };
+
+/* spot likely subscriptions in your spending that you aren't tracking yet */
+const KNOWN = [["apple.com/bill","Apple (App Store/iCloud)","🍎"],["netflix","Netflix","🎬"],["spotify","Spotify","🎧"],["youtube","YouTube Premium","▶️"],
+  ["openai","ChatGPT","🤖"],["chatgpt","ChatGPT","🤖"],["anthropic","Claude","🤖"],["claude","Claude","🤖"],["google","Google","🔎"],["adobe","Adobe","🎨"],
+  ["opus clip","OpusClip","🎬"],["jungleai","Jungle","🧠"],["nord","NordVPN","🛡️"],["disney","Disney+","🏰"],["notion","Notion","📝"],["canva","Canva","🎨"],
+  ["linkedin","LinkedIn Premium","💼"],["github","GitHub","💻"],["cursor","Cursor","💻"],["leetcode","LeetCode","💻"],["microsoft","Microsoft 365","🪟"],["amazon prime","Amazon Prime","📦"]];
+function renderSugg(){
+  if(!canSave){ document.getElementById("suggWrap").hidden = true; return; }
+  const have = subs.map(x=>x.name.toLowerCase());
+  const seen = {};
+  tx.filter(t=>!t.inc).forEach(t=>{ const m=t.m.toLowerCase(); for(const [k,n,e] of KNOWN){ if(m.includes(k) && !have.some(h=>h.includes(n.toLowerCase().split(" ")[0]))) seen[n]={n,e,t}; } });
+  const arr = Object.values(seen);
+  document.getElementById("suggWrap").hidden = !arr.length;
+  document.getElementById("sugg").innerHTML = arr.map((s,j)=>`<div class="sugg">${s.e} <span>${escH(s.n)}<div class="note">${escH(money(s.t.a))} on ${s.t.d.toLocaleDateString("en-GB",{day:"numeric",month:"short"})}</div></span><button data-j="${j}">Add</button></div>`).join("");
+  document.querySelectorAll("#sugg button").forEach(b=>b.onclick=()=>{ const s=arr[+b.dataset.j]; const d=step(s.t.d,"monthly");
+    subs.push({name:s.n,amt:s.t.a,cur:"HKD",cycle:"monthly",next:d.toISOString().slice(0,10),emoji:s.e,note:""}); editing=subs.length-1; renderSubs(); });
+}
+renderSubs();
 </script>
 </body>
 </html>
