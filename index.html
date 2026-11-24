@@ -69,6 +69,12 @@ const CATS = {
   Food:{c:"var(--food)",i:"🍜"}, Transport:{c:"var(--transport)",i:"🚇"},
   Shopping:{c:"var(--shopping)",i:"🛍️"}, Other:{c:"var(--other)",i:"•"}
 };
+const RULES = [
+  ["Transport", /\b(mtr|kmb|citybus|ctb|nwfb|lwb|bus|minibus|taxi|hktaxi|uber|didi|ferry|star ferry|tram|lrt|octopus|airport express|petrol|shell|esso|caltex|sinopec|parking)\b/i],
+  ["Food", /(mcdonald|kfc|burger|pizza|cafe|café|coffee|starbucks|pacific coffee|% arabica|restaurant|kitchen|bistro|bar\b|pub\b|noodle|ramen|sushi|dim sum|bakery|tea|bubble|mixue|pret|subway|fairwood|maxim|café de coral|tamjai|yoshinoya|deliveroo|foodpanda|keeta|canteen|food|eat|7-eleven|7-11|circle k|wellcome|parknshop|park n shop|market|jasons|city'super|aeon)/i],
+  ["Shopping", /(uniqlo|zara|h&m|muji|ikea|apple|amazon|taobao|tmall|hktvmall|watsons|mannings|sasa|fortress|broadway|decathlon|nike|adidas|shop|store|mall|boutique|sephora|don don donki|daiso|ztore)/i],
+];
+function guessCat(m){ for (const [c,re] of RULES) if (re.test(m)) return c; return "Other"; }
 const num = s => { const n = parseFloat(String(s||"").replace(/[^0-9.\-]/g,"")); return isNaN(n)?0:n; };
 const money = n => CUR + Math.abs(n).toLocaleString("en-HK",{minimumFractionDigits:2,maximumFractionDigits:2});
 
@@ -90,7 +96,8 @@ if (decoded === null) {           // opened without data → show demo
 
 const tx = rawLog.split(/\r?\n/).map(l => l.trim()).filter(l => l.includes("|")).map(l => {
   const p = l.split("|");
-  const cat = CATS[(p[3]||"").trim()] ? p[3].trim() : "Other";
+  const given = (p[3]||"").trim();
+  const cat = CATS[given] ? given : guessCat(p[1]||"");
   const d = new Date((p[0]||"").trim().replace(" ","T"));
   return { d: isNaN(d) ? new Date() : d, m:(p[1]||"Purchase").trim(), a:num(p[2]), cat };
 }).sort((a,b) => b.d - a.d);
