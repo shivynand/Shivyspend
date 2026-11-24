@@ -64,7 +64,7 @@ function fromHash(){
   DIAG = "received " + h.length + " characters of data";
   if(!h) return null;
   try{ h=decodeURIComponent(h); }catch(e){}
-  h=h.replace(/\s/g,"").replace(/-/g,"+").replace(/_/g,"/");
+  h=h.replace(/ /g,"+").replace(/\s/g,"").replace(/-/g,"+").replace(/_/g,"/");
   while(h.length%4) h+="=";
   try{ const b=atob(h); return new TextDecoder().decode(Uint8Array.from(b,c=>c.charCodeAt(0))); }catch(e){ DIAG += " but couldn't decode it ("+e.name+"), starts: "+h.slice(0,12); return null; }
 }
