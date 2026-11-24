@@ -79,7 +79,11 @@ const num = s => { const n = parseFloat(String(s||"").replace(/[^0-9.\-]/g,""));
 const money = n => CUR + Math.abs(n).toLocaleString("en-HK",{minimumFractionDigits:2,maximumFractionDigits:2});
 
 let rawLog="", rawBal="";
-const decoded = fromHash();
+let decoded = fromHash();
+try {
+  if (decoded !== null) localStorage.setItem("spend-data", decoded);   // remember latest sync
+  else decoded = localStorage.getItem("spend-data");                   // opened directly → last sync
+} catch (e) {}
 if (decoded === null) {           // opened without data → show demo
   document.getElementById("demo").hidden = false;
   rawLog = ["2026-11-01 08:40|MTR|12.4|Transport","2026-11-01 12:55|Café de Coral|48|Food",
@@ -100,7 +104,7 @@ const tx = rawLog.split(/\r?\n/).map(l => l.trim()).filter(l => l.includes("|"))
   const cat = CATS[given] ? given : guessCat(p[1]||"");
   const d = new Date((p[0]||"").trim().replace(" ","T"));
   return { d: isNaN(d) ? new Date() : d, m:(p[1]||"Purchase").trim(), a:num(p[2]), cat };
-}).sort((a,b) => b.d - a.d);
+}).filter(t => t.a > 0).sort((a,b) => b.d - a.d);
 
 const bal = num(rawBal);
 const balEl = document.getElementById("balance");
